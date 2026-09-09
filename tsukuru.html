@@ -884,6 +884,26 @@ $("mvRun").onclick = async () => {
   const said = $("mvText").value.trim();
   const p = Object.assign({}, person);
   if (said) p.story = (p.story ? p.story + "\n" : "") + said;
+
+  /* 控えから選んでいないときは、書かれた（話された）言葉から
+     お名前・生没年を先に取り出しておく。ここが埋まると時代の記録が出る。 */
+  if (!mvPerson && said && !(p.name || p.birth || p.death)) {
+    $("loadMsg").textContent = "書かれたことを読み取っています";
+    show("loading");
+    try {
+      const r = await fetch("/api/extract", {
+        method: "POST", headers: {"content-type":"application/json"},
+        body: JSON.stringify({ text: said })
+      });
+      const j = await r.json();
+      const f = (j.people || [])[0];
+      if (f) {
+        ["name","kaimyo","birth","death","relation"].forEach(k => { if (!p[k] && f[k]) p[k] = f[k]; });
+        if (f.story && !p.story) p.story = f.story;
+      }
+    } catch (_) {}
+  }
+
   const era = window.Era ? window.Era.eraFor(p) : null;
 
   const notes = [];
