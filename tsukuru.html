@@ -33,6 +33,11 @@ header{border-bottom:1px solid var(--rule);padding:1.1rem 0;position:sticky;top:
 header .wrap{display:flex;align-items:baseline;gap:1.2rem}
 .brand{font-family:var(--serif);font-size:1rem;letter-spacing:.42em;color:var(--paper);text-decoration:none}
 header .sub{font-family:var(--serif);font-size:.76rem;letter-spacing:.2em;color:var(--gold)}
+.back{display:inline-flex;align-items:center;gap:.3rem;background:none;border:0;cursor:pointer;
+      font-family:var(--serif);font-size:.86rem;letter-spacing:.1em;color:var(--paper-dim);
+      padding:.2rem .5rem .2rem 0;margin-right:.2rem}
+.back span{font-size:1.15rem;line-height:1;color:var(--gold)}
+.back:hover{color:var(--paper)}
 
 h1{font-family:var(--serif);font-weight:300;font-size:clamp(1.4rem,4.4vw,2rem);
    line-height:1.5;letter-spacing:.06em;margin:1.3rem 0 .6rem}
@@ -179,6 +184,7 @@ footer a{color:var(--gold-dim)}
 <body>
 
 <header><div class="wrap">
+  <button id="backBtn" class="back hidden" aria-label="ひとつ前に戻る"><span>‹</span>戻る</button>
   <a class="brand" href="/">追憶</a>
   <span class="sub">か ん た ん 入 力</span>
 </div></header>
@@ -360,11 +366,48 @@ footer a{color:var(--gold-dim)}
 <script src="/era.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-const show = (...ids) => {
-  ["start","photoStep","talkStep","movieStep","movieOut","loading","result","stock"].forEach(s =>
-    $(s).classList.toggle("hidden", !ids.includes(s)));
+const SECTIONS = ["start","photoStep","talkStep","movieStep","movieOut","loading","result","stock"];
+let navStack = [];
+let loadingFrom = null;
+
+function currentSection(){
+  return SECTIONS.find(id => !$(id).classList.contains("hidden"));
+}
+function updateBack(){
+  $("backBtn").classList.toggle("hidden", navStack.length === 0);
+}
+function show(to, opts){
+  opts = opts || {};
+  const cur = currentSection();
+  if (!opts.back) {
+    if (to === "loading") {
+      loadingFrom = cur;
+    } else if (cur === "loading") {
+      if (loadingFrom && loadingFrom !== to) navStack.push(loadingFrom);
+      loadingFrom = null;
+    } else if (cur && cur !== to) {
+      navStack.push(cur);
+    }
+    if (to !== "loading" && cur && cur !== to) {
+      try { history.pushState({ s: to }, "", location.pathname + location.search); } catch(_) {}
+    }
+  }
+  SECTIONS.forEach(id => $(id).classList.toggle("hidden", id !== to));
+  updateBack();
   window.scrollTo({top:0, behavior:"smooth"});
-};
+}
+function goBack(){
+  if (currentSection() === "loading") return;      /* 読み取り中は戻らない */
+  const prev = navStack.pop();
+  if (prev === undefined) return;
+  show(prev, {back:true});
+}
+window.addEventListener("popstate", goBack);
+function backPressed(){
+  if (currentSection() === "loading") return;
+  if (!navStack.length) return;
+  try { history.back(); } catch(_) { goBack(); }   /* popstate が goBack を呼ぶ */
+}
 
 const MAX_IMAGES = 6;
 let shots = [];      // {url, tag}
@@ -988,6 +1031,8 @@ $("mvMail").onclick = () => {
   location.href = "mailto:w.closet.k8114@gmail.com?subject=" +
     encodeURIComponent("追憶 — 動画のご依頼") + "&body=" + encodeURIComponent(body);
 };
+
+document.getElementById("backBtn").addEventListener("click", backPressed);
 
 loadStock();
 
