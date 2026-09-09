@@ -235,8 +235,8 @@ footer a{color:var(--gold-dim)}
 
     <input type="file" id="fileCam" accept="image/*" capture="environment" multiple>
     <input type="file" id="fileAny" accept="image/*,application/pdf,.pdf" multiple>
-    <input type="file" id="mvOneCam" accept="image/*" capture="environment">
-    <input type="file" id="mvOnePick" accept="image/*">
+    <input type="file" id="mvOneCam" accept="image/*" capture="environment" multiple>
+    <input type="file" id="mvOnePick" accept="image/*" multiple>
     <input type="file" id="mvRefFile" accept="image/*,application/pdf,.pdf,video/*" multiple>
 
     <div class="drop" id="drop">ここに写真やPDFを置いても読み込めます</div>
@@ -274,9 +274,9 @@ footer a{color:var(--gold-dim)}
 
     <div class="step-box">
       <p class="n">一</p>
-      <h3>動かす一枚</h3>
-      <p class="d">ご先祖さまが写っている写真を、一枚だけ。お顔がはっきり写っているものが向いています。</p>
-      <div id="mvOne"></div>
+      <h3>動かす写真</h3>
+      <p class="d">ご先祖さまが写っている写真を入れてください。<strong style="font-weight:400;color:var(--paper)">何枚でも構いません（6枚まで）。</strong>一枚ずつ、それぞれの映像をおつくりします。お顔がはっきり写っているものが向いています。</p>
+      <div class="shots" id="mvOne"></div>
       <div class="pick">
         <button id="mvCam">カメラで撮る</button>
         <button id="mvPick">写真を選ぶ</button>
@@ -761,16 +761,18 @@ $("downloadBrief").onclick = () => {
 };
 
 /* ================= 動画をつくる ================= */
-let mvPhoto = null;      // {url}
+let mvPhotos = [];       // [{url}] 最大6枚
 let mvRefs = [];         // [{url, tag}]
 let mvPerson = null;     // 控えから選んだ人
 let mvBriefText = "";
 
+const MV_MAX = 6;
 function drawMvOne(){
-  $("mvOne").innerHTML = mvPhoto
-    ? `<div class="one"><img src="${mvPhoto.url}" alt=""><button id="mvDel" aria-label="外す">×</button></div>` : "";
-  const d = $("mvDel");
-  if (d) d.onclick = () => { mvPhoto = null; drawMvOne(); };
+  $("mvOne").innerHTML = mvPhotos.map((x,i) =>
+    `<div class="shot"><img src="${x.url}" alt=""><span class="tag">${i+1}枚目</span><button data-p="${i}" aria-label="外す">×</button></div>`).join("");
+  $("mvOne").querySelectorAll("button").forEach(b => {
+    b.onclick = () => { mvPhotos.splice(+b.dataset.p, 1); drawMvOne(); };
+  });
 }
 function drawMvRefs(){
   $("mvRefs").innerHTML = mvRefs.map((r,i) =>
@@ -850,15 +852,21 @@ async function mvIntakeRefs(list){
 
 $("wayMovie").onclick = () => { drawMvOne(); drawMvRefs(); drawMvWho(); show("movieStep"); };
 $("mvBack").onclick   = () => show("start");
-$("mvAgain").onclick  = () => { mvPhoto = null; mvRefs = []; mvPerson = null; $("mvText").value = ""; show("start"); };
+$("mvAgain").onclick  = () => { mvPhotos = []; mvRefs = []; mvPerson = null; $("mvText").value = ""; show("start"); };
 $("mvCam").onclick    = () => $("mvOneCam").click();
 $("mvPick").onclick   = () => $("mvOnePick").click();
 $("mvRefPick").onclick= () => $("mvRefFile").click();
 ["mvOneCam","mvOnePick"].forEach(id => {
   $(id).onchange = async (e) => {
-    const f = e.target.files[0]; e.target.value = "";
-    if (!f) return;
-    try { mvPhoto = { url: await shrink(f) }; drawMvOne(); } catch(_) { alert("写真を開けませんでした。"); }
+    const files = [...e.target.files]; e.target.value = "";
+    if (!files.length) return;
+    let skipped = 0;
+    for (const f of files) {
+      if (mvPhotos.length >= MV_MAX) { skipped++; continue; }
+      try { mvPhotos.push({ url: await shrink(f) }); } catch(_) {}
+    }
+    drawMvOne();
+    if (skipped) alert(`一度にお預かりできるのは${MV_MAX}枚までです。${skipped}枚は入りませんでした。`);
   };
 });
 $("mvRefFile").onchange = async (e) => {
@@ -871,63 +879,81 @@ if (SR) { $("mvMic").onclick = () => window.startMic($("mvMic"), $("mvText")); }
 else { $("mvMic").style.display = "none"; }
 
 $("mvRun").onclick = async () => {
-  if (!mvPhoto) { alert("動かす一枚を入れてください。"); return; }
-  $("loadMsg").textContent = "写真を見ています";
-  show("loading");
+  if (!mvPhotos.length) { alert("動かす写真を入れてください。"); return; }
   const person = mvPerson || {};
   const said = $("mvText").value.trim();
-  let photo = null, note = "";
-  try {
-    const r = await fetch("/api/extract", {
-      method:"POST", headers:{"content-type":"application/json"},
-      body: JSON.stringify({ mode:"photo", images:[mvPhoto.url, ...mvRefs.map(x=>x.url)].slice(0,6), text: said })
-    });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || "うまくいきませんでした");
-    photo = j.photo; note = j.note || "";
-  } catch (e) { note = String(e.message || e); }
-
   const p = Object.assign({}, person);
   if (said) p.story = (p.story ? p.story + "\n" : "") + said;
   const era = window.Era ? window.Era.eraFor(p) : null;
+
+  const notes = [];
+  const shots = [];
+  for (let i = 0; i < mvPhotos.length; i++) {
+    $("loadMsg").textContent = mvPhotos.length > 1
+      ? `${i + 1}枚目の写真を見ています（全${mvPhotos.length}枚）`
+      : "写真を見ています";
+    show("loading");
+    const imgs = [mvPhotos[i].url].concat(mvRefs.slice(0, 2).map(x => x.url));
+    const guide = (imgs.length > 1
+      ? "一枚目が、これから動かす写真です。二枚目以降は参考資料なので、動かす対象ではありません。\n\n" : "")
+      + (said ? said : "");
+    try {
+      const r = await fetch("/api/extract", {
+        method: "POST", headers: {"content-type":"application/json"},
+        body: JSON.stringify({ mode: "photo", images: imgs, text: guide })
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "うまくいきませんでした");
+      shots.push(j.photo);
+      if (j.note) notes.push(`${i + 1}枚目：${j.note}`);
+    } catch (e) {
+      shots.push(null);
+      notes.push(`${i + 1}枚目：${String(e.message || e)}`);
+    }
+  }
 
   const out = [];
   out.push("■ 追憶 — 動画をつくるための指示文");
   out.push("");
   if (p.name || p.kaimyo) out.push(`【どなたか】${p.name || ""}${p.kaimyo ? "（" + p.kaimyo + "）" : ""}${p.relation ? " ／ " + p.relation : ""}`);
   if (era) out.push("【生没】" + era.chips.join(" ／ "));
-  if (photo) {
+  out.push(`【写真】${mvPhotos.length}枚（一枚につき、三十秒の映像を一本）`);
+  if (mvRefs.length) out.push(`【参考資料】${mvRefs.length}点（${mvRefs.map(r => r.tag || "写真").join("、")}）`);
+
+  shots.forEach((ph, i) => {
     out.push("");
-    out.push("【写真に写っているもの】");
-    photo.subjects.forEach(x => out.push("・" + x));
-    if (photo.setting) out.push("・場所：" + photo.setting);
-    if (photo.era_hints) out.push("・年代の手がかり：" + photo.era_hints);
-    if (photo.condition) out.push("・写真の状態：" + photo.condition);
-    if (photo.keep.length) {
-      out.push("");
+    out.push("─".repeat(20));
+    out.push(`◆ ${i + 1}枚目`);
+    if (!ph) { out.push("・読み取れませんでした。手で書き足してください。"); return; }
+    if (ph.subjects.length) {
+      out.push("【写っているもの】");
+      ph.subjects.forEach(x => out.push("・" + x));
+    }
+    if (ph.setting) out.push("・場所：" + ph.setting);
+    if (ph.era_hints) out.push("・年代の手がかり：" + ph.era_hints);
+    if (ph.condition) out.push("・写真の状態：" + ph.condition);
+    if (ph.keep.length) {
       out.push("【最後まで消してはいけないもの】");
-      photo.keep.forEach(x => out.push("・" + x));
+      ph.keep.forEach(x => out.push("・" + x));
     }
-    if (photo.motion.length) {
-      out.push("");
+    if (ph.motion.length) {
       out.push("【足してよい動き】");
-      photo.motion.forEach(x => out.push("・" + x));
+      ph.motion.forEach(x => out.push("・" + x));
     }
-    if (photo.avoid.length) {
-      out.push("");
+    if (ph.avoid.length) {
       out.push("【足してはいけないもの】");
-      photo.avoid.forEach(x => out.push("・" + x));
+      ph.avoid.forEach(x => out.push("・" + x));
     }
-  }
-  if (mvRefs.length) {
-    out.push("");
-    out.push(`【参考にした資料】${mvRefs.length}点（${mvRefs.map(r=>r.tag||"写真").join("、")}）`);
-  }
+  });
+
+  out.push("");
+  out.push("─".repeat(20));
   out.push("");
   out.push(window.Era ? window.Era.videoBrief(p, era) : "");
   mvBriefText = out.join("\n");
   $("mvBrief").textContent = mvBriefText;
-  $("mvNotice").innerHTML = note ? `<div class="notice">${esc(note)}</div>` : "";
+  $("mvNotice").innerHTML = notes.length
+    ? `<div class="notice">${esc(notes.join(" ／ "))}</div>` : "";
   show("movieOut");
 };
 
