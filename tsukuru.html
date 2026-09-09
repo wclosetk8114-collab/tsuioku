@@ -73,6 +73,18 @@ input[type=file]{display:none}
 .one img{width:100%;height:100%;object-fit:cover}
 .one button{position:absolute;top:2px;right:2px;width:22px;height:22px;border:0;
             background:rgba(0,0,0,.72);color:#fff;cursor:pointer;font-size:14px;line-height:1}
+.past{border:1px solid var(--rule);background:var(--ink-2);padding:.9rem 1rem;margin:0 0 .9rem}
+.past .h{font-family:var(--serif);font-size:.78rem;letter-spacing:.16em;color:var(--gold);margin:0 0 .6rem}
+.past label{display:flex;gap:.55rem;align-items:flex-start;font-size:.82rem;line-height:1.8;
+            color:var(--paper-dim);margin:0 0 .5rem;cursor:pointer}
+.past label:last-child{margin:0}
+.past input{margin-top:.4rem;accent-color:var(--gold);flex:none}
+.past .src{font-family:var(--serif);color:var(--gold);font-size:.74rem;letter-spacing:.1em;margin-right:.35rem}
+.pastmedia{display:flex;gap:.5rem;flex-wrap:wrap;margin:0 0 .9rem}
+.pastmedia .shot{width:74px;height:74px;cursor:pointer;opacity:.55;transition:opacity .2s,border-color .2s}
+.pastmedia .shot.on{opacity:1;border-color:var(--gold)}
+.pastmedia .shot .pick-tag{position:absolute;bottom:0;left:0;right:0;background:rgba(28,35,64,.78);
+     color:#fff;font-size:.6rem;text-align:center;letter-spacing:.06em}
 .who-pick{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 .9rem}
 .who-pick button{background:var(--ink-3);border:1px solid var(--rule);color:var(--paper-dim);
                  font-family:var(--serif);font-size:.8rem;letter-spacing:.06em;padding:.35rem .8rem;cursor:pointer}
@@ -234,7 +246,7 @@ footer a{color:var(--gold-dim)}
       <span class="ico">映</span>
       <span>
         <span class="t">動画をつくる</span>
-        <span class="d">動かす一枚と、その方のこと</span>
+        <span class="d">動かす写真と、その方のこと</span>
       </span>
       <span class="go">›</span>
     </button>
@@ -276,7 +288,7 @@ footer a{color:var(--gold-dim)}
 
   <section id="movieStep" class="hidden">
     <h2>動画をつくる</h2>
-    <p class="dim small">動かしたい一枚と、その方のことを集めます。集まったものから、映像をつくるための指示文をこちらで組み立てます。</p>
+    <p class="dim small">動かしたい写真と、その方のことを集めます。これまでにこのツールへ入れた言葉や写真も、そのまま引き継ぎます。</p>
 
     <div class="step-box">
       <p class="n">一</p>
@@ -294,6 +306,7 @@ footer a{color:var(--gold-dim)}
       <h3>この方について</h3>
       <p class="d">控えに入っている方から選べます。どんな人だったかは、話しても、書いても構いません。</p>
       <div class="who-pick" id="mvWho"></div>
+      <div id="mvPast"></div>
       <textarea id="mvText" placeholder="いつも縁側でお茶を飲んでいた。畑のことになると急に厳しくなる人だった。&#10;昭和二十年生まれ、平成七年に亡くなった。"></textarea>
       <div class="row" style="display:flex;gap:.6rem;align-items:center;margin-top:.7rem">
         <button class="mic sm" id="mvMic"><span class="dot"></span><span>話して入れる</span></button>
@@ -304,6 +317,7 @@ footer a{color:var(--gold-dim)}
       <p class="n">三</p>
       <h3>参考にするもの（なくても大丈夫）</h3>
       <p class="d">他の写真、家系図のPDF、参考にしたい動画。動画は最初のひとコマだけを見ます。</p>
+      <div id="mvPastMedia"></div>
       <div class="shots" id="mvRefs"></div>
       <div class="pick">
         <button id="mvRefPick">写真・PDF・動画を選ぶ</button>
@@ -413,6 +427,35 @@ const MAX_IMAGES = 6;
 let shots = [];      // {url, tag}
 let current = [];
 let stock = [];
+
+/* このセッションで入れたもの（言葉と画像）を覚えておく */
+let sess = { texts: [], media: [] };
+function loadSess(){
+  try { sess = JSON.parse(localStorage.getItem("tsuioku.session") || '{"texts":[],"media":[]}'); }
+  catch(_) { sess = { texts: [], media: [] }; }
+  if (!Array.isArray(sess.texts)) sess.texts = [];
+  if (!Array.isArray(sess.media)) sess.media = [];
+}
+function saveSess(){
+  try {
+    sess.texts = sess.texts.slice(-12);
+    sess.media = sess.media.slice(-8);
+    localStorage.setItem("tsuioku.session", JSON.stringify(sess));
+  } catch(_) {}
+}
+function noteText(src, text){
+  const t = (text || "").trim();
+  if (!t) return;
+  if (sess.texts.some(x => x.text === t)) return;
+  sess.texts.push({ src, text: t, at: Date.now() });
+  saveSess();
+}
+function noteMedia(url, tag){
+  if (!url) return;
+  if (sess.media.some(m => m.url === url)) return;
+  sess.media.push({ url, tag: tag || "写真" });
+  saveSess();
+}
 
 function loadStock(){
   try { stock = JSON.parse(localStorage.getItem("tsuioku.stock") || "[]"); }
@@ -640,10 +683,14 @@ async function extract(payload){
   }
 }
 
-$("runPhoto").onclick = () => extract({ images: shots.map(s => s.url) });
+$("runPhoto").onclick = () => {
+  shots.forEach(x => noteMedia(x.url, x.tag || "読み取った写真"));
+  extract({ images: shots.map(s => s.url) });
+};
 $("runTalk").onclick  = () => {
   const t = $("talkText").value.trim();
   if (!t) return;
+  noteText("話した・書いたこと", t);
   extract({ text: t });
 };
 
@@ -764,6 +811,11 @@ function drawStock(){
 }
 
 $("save").onclick = () => {
+  current.forEach(p => {
+    const who = p.name || p.kaimyo || "";
+    if (p.story) noteText(who ? who + "のものがたり" : "ものがたり", p.story);
+    if (p.memo)  noteText(who ? who + "の変遷記録" : "変遷記録", p.memo);
+  });
   stock = stock.concat(current.filter(p => p.name || p.kaimyo || p.death || p.memo || p.story));
   saveStock(); drawStock(); shots = []; drawShots(); $("talkText").value = ""; show("stock");
 };
@@ -824,6 +876,55 @@ function drawMvRefs(){
     b.onclick = () => { mvRefs.splice(+b.dataset.r, 1); drawMvRefs(); };
   });
 }
+let pastPicked = new Set();     /* 反映する言葉 */
+let pastMediaPicked = new Set();/* 参考に回す画像 */
+
+function drawMvPast(){
+  const box = $("mvPast");
+  if (!sess.texts.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="past">
+    <p class="h">これまでに入れたこと（反映するものにチェック）</p>
+    ${sess.texts.slice().reverse().map((t, n) => {
+      const i = sess.texts.length - 1 - n;
+      const short = t.text.length > 90 ? t.text.slice(0, 90) + "…" : t.text;
+      return `<label><input type="checkbox" data-pt="${i}" ${pastPicked.has(i) ? "checked" : ""}>
+        <span><span class="src">${esc(t.src)}</span>${esc(short)}</span></label>`;
+    }).join("")}
+  </div>`;
+  box.querySelectorAll("input[data-pt]").forEach(cb => {
+    cb.onchange = () => {
+      const i = +cb.dataset.pt;
+      if (cb.checked) pastPicked.add(i); else pastPicked.delete(i);
+    };
+  });
+}
+
+function drawMvPastMedia(){
+  const box = $("mvPastMedia");
+  if (!sess.media.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `<p class="d" style="margin:0 0 .5rem">これまでに読み込んだもの（押すと参考資料に入ります）</p>
+    <div class="pastmedia">${sess.media.slice().reverse().map((m, n) => {
+      const i = sess.media.length - 1 - n;
+      return `<div class="shot ${pastMediaPicked.has(i) ? "on" : ""}" data-pm="${i}">
+        <img src="${m.url}" alt=""><span class="pick-tag">${esc(m.tag)}</span></div>`;
+    }).join("")}</div>`;
+  box.querySelectorAll("[data-pm]").forEach(el => {
+    el.onclick = () => {
+      const i = +el.dataset.pm;
+      const m = sess.media[i];
+      if (pastMediaPicked.has(i)) {
+        pastMediaPicked.delete(i);
+        mvRefs = mvRefs.filter(r => r.url !== m.url);
+      } else {
+        if (mvRefs.length >= 5) { alert("参考資料は5点までです。"); return; }
+        pastMediaPicked.add(i);
+        mvRefs.push({ url: m.url, tag: m.tag });
+      }
+      drawMvPastMedia(); drawMvRefs();
+    };
+  });
+}
+
 function drawMvWho(){
   if (!stock.length) {
     $("mvWho").innerHTML = `<span class="dim small">控えに人が入ると、ここから選べます。</span>`;
@@ -888,12 +989,18 @@ async function mvIntakeRefs(list){
       } else {
         mvRefs.push({ url: await shrink(f), tag: "" });
       }
+      mvRefs.slice(-2).forEach(x => noteMedia(x.url, x.tag || "参考の写真"));
     } catch (e) { alert(String(e.message || e)); }
   }
   drawMvRefs();
 }
 
-$("wayMovie").onclick = () => { drawMvOne(); drawMvRefs(); drawMvWho(); show("movieStep"); };
+$("wayMovie").onclick = () => {
+  /* これまでに入れた言葉は、はじめから反映する（外したいものだけ外してもらう） */
+  sess.texts.forEach((_, i) => pastPicked.add(i));
+  drawMvOne(); drawMvRefs(); drawMvWho(); drawMvPast(); drawMvPastMedia();
+  show("movieStep");
+};
 $("mvBack").onclick   = () => show("start");
 $("mvAgain").onclick  = () => { mvPhotos = []; mvRefs = []; mvPerson = null; $("mvText").value = ""; show("start"); };
 $("mvCam").onclick    = () => $("mvOneCam").click();
@@ -924,7 +1031,12 @@ else { $("mvMic").style.display = "none"; }
 $("mvRun").onclick = async () => {
   if (!mvPhotos.length) { alert("動かす写真を入れてください。"); return; }
   const person = mvPerson || {};
-  const said = $("mvText").value.trim();
+  const typed = $("mvText").value.trim();
+  if (typed) noteText("動画づくりで書いたこと", typed);
+  const pastLines = [...pastPicked].sort((a,b)=>a-b)
+    .map(i => sess.texts[i]).filter(Boolean)
+    .map(t => `（${t.src}）${t.text}`);
+  const said = [typed].concat(pastLines).filter(Boolean).join("\n");
   const p = Object.assign({}, person);
   if (said) p.story = (p.story ? p.story + "\n" : "") + said;
 
@@ -982,6 +1094,11 @@ $("mvRun").onclick = async () => {
   if (era) out.push("【生没】" + era.chips.join(" ／ "));
   out.push(`【写真】${mvPhotos.length}枚（一枚につき、三十秒の映像を一本）`);
   if (mvRefs.length) out.push(`【参考資料】${mvRefs.length}点（${mvRefs.map(r => r.tag || "写真").join("、")}）`);
+  if (pastLines.length) {
+    out.push("");
+    out.push("【これまでに伺っていること】");
+    pastLines.forEach(l => out.push("・" + l));
+  }
 
   shots.forEach((ph, i) => {
     out.push("");
