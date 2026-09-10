@@ -300,11 +300,27 @@ function videoBrief(person, era) {
     era.region.sources.forEach((s) => out.push(`・${s.title} ${s.url}`));
   }
 
+  if (window.Yomi) {
+    const src = [person.name, person.kaimyo, person.place, person.memo, person.story,
+                 person.birth, person.death].filter(Boolean).join(" ");
+    const y = window.Yomi.check(src);
+    if (y.known.length || y.ambiguous.length) {
+      out.push("");
+      out.push("【読みの注意（ナレーション用）】");
+      y.known.forEach((k) => out.push(`・${k.word} → ${k.yomi}`));
+      y.ambiguous.forEach((a) => {
+        out.push(`・${a.word} … 読みが割れる（${a.cands.join(" ／ ")}）`);
+        out.push("　　前後を含めた言い回しで読みを決める。");
+      });
+      out.push("※ ここに無い固有名詞は、コトバンク（kotobank.jp）と Weblio（weblio.jp）で確かめて、辞書に足す。");
+    }
+  }
+
   out.push("");
   out.push("【映像への反映】");
   out.push("・写真に写っている範囲は、いっさい作り変えない。服装も背景も持ち物も、写っているまま。");
   out.push("・足すのは、写真が撮られた数秒の時間の流れだけ（表情・視線・呼吸・わずかな風）。");
-  out.push("・白黒はそのまま。カラー化しない。");
+  out.push("・カラー化する場合は、写真そのものを塗り替えるのではなく、映像のなかで白黒から色が入る形にする（お顔が保てる）。");
   out.push("");
   out.push("【ナレーションへの反映】");
   if (era && era.lines.length) {
