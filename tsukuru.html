@@ -1230,8 +1230,7 @@ function setJob(i, patch){
 }
 function showSetup(detail){
   $("mvGen").innerHTML = `<div class="setup">
-    <b>動画をつくる設定が、まだ済んでいません。</b><br>
-    ${esc(detail || "")}<br><br>
+    <b>動画をつくる設定が、まだ済んでいません。</b><br><br>
     Vercel の画面で <b>Settings → Environment Variables</b> を開き、名前を <b>FAL_KEY</b>、
     値に fal.ai の API キーを入れて保存してください。保存したあと一度だけ
     <b>Deployments → 最新のもの → Redeploy</b> を押すと、この画面から動画がつくれるようになります。<br>
