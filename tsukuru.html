@@ -1167,6 +1167,7 @@ $("mvRun").onclick = async () => {
   mvJobs = mvPhotos.map(() => ({ state: "idle" }));
   drawMvGen();
   show("movieOut");
+  checkVideoSetup();
 };
 
 /* ---- 動画AIに渡す、短い指示をつくる ---- */
@@ -1236,6 +1237,15 @@ function showSetup(detail){
     <b>Deployments → 最新のもの → Redeploy</b> を押すと、この画面から動画がつくれるようになります。<br>
     <span style="opacity:.75">※ キーはここには貼らないでください。Vercel の画面にだけ入れてください。</span>
   </div>`;
+}
+async function checkVideoSetup(){
+  try {
+    const r = await fetch("/api/video?id=setup-probe");
+    if (r.status === 503) {
+      const j = await r.json().catch(() => ({}));
+      if (j.needsSetup) showSetup(j.detail);
+    }
+  } catch (_) {}
 }
 async function genOne(i){
   if (!mvPhotos[i]) return;
