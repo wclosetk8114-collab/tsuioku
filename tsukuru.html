@@ -89,6 +89,22 @@ input[type=file]{display:none}
 .who-pick button{background:var(--ink-3);border:1px solid var(--rule);color:var(--paper-dim);
                  font-family:var(--serif);font-size:.8rem;letter-spacing:.06em;padding:.35rem .8rem;cursor:pointer}
 .who-pick button.sel{border-color:var(--gold);color:var(--gold)}
+.gen-row{display:grid;grid-template-columns:74px 1fr;gap:.9rem;align-items:center;
+         border-top:1px solid var(--rule);padding:.9rem 0}
+.gen-row:first-child{border-top:0}
+.gen-row .th{width:74px;height:74px;border:1px solid var(--rule);overflow:hidden}
+.gen-row .th img{width:100%;height:100%;object-fit:cover}
+.gen-row .st{font-size:.82rem;color:var(--paper-dim);line-height:1.7}
+.gen-row button{background:var(--paper);border:1px solid var(--paper);color:#fff;
+                font-family:var(--serif);font-size:.85rem;letter-spacing:.12em;
+                padding:.55rem 1.1rem;cursor:pointer;margin-top:.4rem}
+.gen-row button:disabled{opacity:.4;cursor:default}
+.gen-row video{width:100%;margin-top:.5rem;border:1px solid var(--rule);background:#000}
+.gen-row a.dl{display:inline-block;margin-top:.45rem;font-family:var(--serif);
+              font-size:.8rem;letter-spacing:.1em;color:var(--gold)}
+.setup{border:1px solid var(--gold-dim);background:var(--ink-3);padding:1rem 1.1rem;
+       font-size:.83rem;line-height:1.9;color:var(--paper-dim)}
+.setup b{color:var(--paper);font-weight:400}
 .brief-out{border:1px solid var(--gold-dim);background:var(--ink-3);padding:1.2rem;margin:0 0 1rem}
 .brief-out pre{margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--sans);
                font-size:.83rem;line-height:1.95;color:var(--paper)}
@@ -331,9 +347,19 @@ footer a{color:var(--gold-dim)}
   </section>
 
   <section id="movieOut" class="hidden">
-    <h2>動画をつくるための指示文</h2>
+    <h2>できあがりました</h2>
     <div id="mvNotice"></div>
-    <div class="brief-out"><pre id="mvBrief"></pre></div>
+
+    <div class="step-box">
+      <p class="n">動 画 を つ く る</p>
+      <p class="d">下の指示文をもとに、この場で映像をつくります。写真一枚につき十秒。<strong style="font-weight:400;color:var(--paper)">一本あたり百七十円ほど</strong>かかります（fal.ai の実費）。</p>
+      <div id="mvGen"></div>
+    </div>
+
+    <details class="brief" style="margin:0 0 1rem">
+      <summary>指示文を見る ▾</summary>
+      <div class="brief-out" style="margin:0 1rem 1rem"><pre id="mvBrief"></pre></div>
+    </details>
     <div class="actions">
       <button class="btn" id="mvCopy">指示文をコピー</button>
       <button class="btn ghost" id="mvSave">ファイルで受け取る</button>
@@ -860,6 +886,8 @@ let mvPhotos = [];       // [{url}] 最大6枚
 let mvRefs = [];         // [{url, tag}]
 let mvPerson = null;     // 控えから選んだ人
 let mvBriefText = "";
+let mvPrompts = [];      // 写真ごとの、動画AIに渡す短い指示
+let mvJobs = [];         // 写真ごとの生成の状態
 
 const MV_MAX = 6;
 function drawMvOne(){
@@ -1002,7 +1030,7 @@ $("wayMovie").onclick = () => {
   show("movieStep");
 };
 $("mvBack").onclick   = () => show("start");
-$("mvAgain").onclick  = () => { mvPhotos = []; mvRefs = []; mvPerson = null; $("mvText").value = ""; show("start"); };
+$("mvAgain").onclick  = () => { mvPhotos = []; mvRefs = []; mvPerson = null; mvPrompts = []; mvJobs = []; $("mvGen").innerHTML = ""; $("mvText").value = ""; show("start"); };
 $("mvCam").onclick    = () => $("mvOneCam").click();
 $("mvPick").onclick   = () => $("mvOnePick").click();
 $("mvRefPick").onclick= () => $("mvRefFile").click();
@@ -1134,8 +1162,123 @@ $("mvRun").onclick = async () => {
   $("mvBrief").textContent = mvBriefText;
   $("mvNotice").innerHTML = notes.length
     ? `<div class="notice">${esc(notes.join(" ／ "))}</div>` : "";
+
+  mvPrompts = shots.map(ph => shotPrompt(ph, era, p));
+  mvJobs = mvPhotos.map(() => ({ state: "idle" }));
+  drawMvGen();
   show("movieOut");
 };
+
+/* ---- 動画AIに渡す、短い指示をつくる ---- */
+function shotPrompt(ph, era, p){
+  const L = [];
+  L.push("一枚の古い記念写真が、そのまま静かに動きはじめる。写真の中の時間が、ほんの数秒だけ流れる。");
+  if (ph && ph.subjects && ph.subjects.length) L.push("写っているのは、" + ph.subjects.join("、") + "。");
+  if (ph && ph.setting) L.push("場所は、" + ph.setting + "。");
+  const mo = (ph && ph.motion && ph.motion.length) ? ph.motion : [
+    "まばたきをする", "呼吸で肩がわずかに上下する", "口もとがほんの少しゆるむ", "髪や衣服がかすかに揺れる"
+  ];
+  L.push("動きは、" + mo.join("、") + "。それ以上のことはしない。");
+  if (ph && ph.keep && ph.keep.length) {
+    L.push("最後まで変えてはいけないもの：" + ph.keep.join("、") + "。顔立ち・体つき・服装・持ちものは、一枚目のまま。");
+  } else {
+    L.push("顔立ち・体つき・服装・持ちものは、写真のまま最後まで変えない。");
+  }
+  if (ph && ph.condition) L.push("写真の粒子・にじみ・色あせは、そのまま残す。" + ph.condition + "。");
+  else L.push("写真の粒子・にじみ・色あせは、そのまま残す。");
+  L.push("カメラはほとんど動かさない。ごくわずかに寄るだけ。切り替えはしない。");
+  if (ph && ph.avoid && ph.avoid.length) L.push("足してはいけないもの：" + ph.avoid.join("、") + "。");
+  if (era && era.chips && era.chips.length) L.push("（参考：" + era.chips.join(" ／ ") + "。ただし背景に時代を描き足さない。写真にあるものだけを動かす）");
+  return L.join("\n");
+}
+
+/* ---- 生成のUI ---- */
+const MV_SECONDS = 10;
+function jobLabel(j){
+  if (j.state === "idle")    return "まだつくっていません。";
+  if (j.state === "sending") return "お願いしています…";
+  if (j.state === "waiting") return "つくっています。三分ほどかかります…" + (j.queue ? `（順番待ち ${j.queue}）` : "");
+  if (j.state === "done")    return "できあがりました。";
+  if (j.state === "error")   return j.msg || "うまくいきませんでした。";
+  return "";
+}
+function drawMvGen(){
+  const box = $("mvGen");
+  if (!mvPhotos.length) { box.innerHTML = ""; return; }
+  box.innerHTML = mvPhotos.map((x, i) => {
+    const j = mvJobs[i] || { state: "idle" };
+    const busy = j.state === "sending" || j.state === "waiting";
+    return `<div class="gen-row">
+      <div class="th"><img src="${x.url}" alt=""></div>
+      <div>
+        <div class="st" id="mvSt-${i}">${esc(jobLabel(j))}</div>
+        ${j.state === "done" && j.url
+          ? `<video controls playsinline preload="metadata" src="${esc(j.url)}"></video>
+             <a class="dl" href="${esc(j.url)}" download="追憶_${i + 1}枚目.mp4" target="_blank" rel="noopener">動画を保存する</a>`
+          : `<button data-g="${i}"${busy ? " disabled" : ""}>${j.state === "error" ? "もう一度つくる" : "この写真から動画をつくる"}</button>`}
+      </div>
+    </div>`;
+  }).join("");
+  box.querySelectorAll("button[data-g]").forEach(b => {
+    b.onclick = () => genOne(+b.dataset.g);
+  });
+}
+function setJob(i, patch){
+  mvJobs[i] = Object.assign({}, mvJobs[i], patch);
+  drawMvGen();
+}
+function showSetup(detail){
+  $("mvGen").innerHTML = `<div class="setup">
+    <b>動画をつくる設定が、まだ済んでいません。</b><br>
+    ${esc(detail || "")}<br><br>
+    Vercel の画面で <b>Settings → Environment Variables</b> を開き、名前を <b>FAL_KEY</b>、
+    値に fal.ai の API キーを入れて保存してください。保存したあと一度だけ
+    <b>Deployments → 最新のもの → Redeploy</b> を押すと、この画面から動画がつくれるようになります。<br>
+    <span style="opacity:.75">※ キーはここには貼らないでください。Vercel の画面にだけ入れてください。</span>
+  </div>`;
+}
+async function genOne(i){
+  if (!mvPhotos[i]) return;
+  const yen = Math.round(0.112 * MV_SECONDS * 155);
+  if (!confirm(`${i + 1}枚目から、${MV_SECONDS}秒の動画をつくります。\n実費が ${yen} 円ほどかかります。よろしいですか。`)) return;
+  setJob(i, { state: "sending", msg: "" });
+  let id, model;
+  try {
+    const r = await fetch("/api/video", {
+      method: "POST", headers: {"content-type":"application/json"},
+      body: JSON.stringify({ image: mvPhotos[i].url, prompt: mvPrompts[i] || mvBriefText.slice(0, 1200), seconds: MV_SECONDS })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 503 && j.needsSetup) { showSetup(j.detail); return; }
+    if (!r.ok) throw new Error(j.detail ? `${j.error}（${String(j.detail).slice(0, 120)}）` : (j.error || "うまくいきませんでした"));
+    id = j.id; model = j.model;
+  } catch (e) {
+    setJob(i, { state: "error", msg: String(e.message || e) });
+    return;
+  }
+  setJob(i, { state: "waiting", id, model, queue: 0 });
+
+  const started = Date.now();
+  while (Date.now() - started < 15 * 60 * 1000) {
+    await new Promise(r => setTimeout(r, 6000));
+    try {
+      const r = await fetch(`/api/video?id=${encodeURIComponent(id)}&model=${encodeURIComponent(model)}`);
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "様子を見にいけませんでした");
+      if (j.state === "COMPLETED" && j.url) {
+        setJob(i, { state: "done", url: j.url });
+        noteMedia(j.url, `${i + 1}枚目の動画`);
+        return;
+      }
+      if (j.state === "FAILED" || j.state === "ERROR") throw new Error("つくれませんでした。写真を変えて、もう一度お試しください。");
+      setJob(i, { state: "waiting", queue: j.queue || 0 });
+    } catch (e) {
+      setJob(i, { state: "error", msg: String(e.message || e) });
+      return;
+    }
+  }
+  setJob(i, { state: "error", msg: "時間がかかりすぎました。もう一度お試しください。" });
+}
 
 $("mvCopy").onclick = async () => {
   try { await navigator.clipboard.writeText(mvBriefText); $("mvCopy").textContent = "コピーしました"; }
