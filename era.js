@@ -192,7 +192,12 @@ function eraFor(person) {
     if (by) chips.push(`${dy - by}年の生涯`);
   }
 
-  return { birthYear: by, deathYear: dy, chips, lines, timeline: timeline(by, dy, 1) };
+  const place = person.place || person.birthplace || person.memo || "";
+  const region = window.Regions ? window.Regions.regionFor(place) : null;
+  const sub = region && window.Regions ? window.Regions.subareaFor(region, place) : null;
+  const stages = region && window.Regions ? window.Regions.lifeStages(region, by, dy) : [];
+
+  return { birthYear: by, deathYear: dy, chips, lines, timeline: timeline(by, dy, 1), region, sub, stages };
 }
 
 /* 動画の指示文の下書き */
@@ -229,6 +234,72 @@ function videoBrief(person, era) {
     out.push("※ ナレーションは、まずこの言葉から書く。時代の記録は、その背景として一行だけ添える。");
     out.push("※ ここに書かれていないことは、足さない。");
   }
+  if (era && era.region) {
+    const R = window.Regions;
+    out.push("");
+    out.push(`【暮らしの実像 —— ${era.region.label}${era.sub ? "（" + era.sub.name + "）" : ""}】`);
+    out.push("※ 全国の年表だけで描くと「明治の日本人」という、どこにもいない平均像になる。");
+    out.push("※ 東京の近代化は、同じ速さでこの土地には届いていない。届いた年が、この人の一生を決めている。");
+    if (era.sub) out.push(`・${era.sub.name}：${era.sub.note}`);
+    out.push("");
+    era.stages.filter((s) => !s.repeat).forEach((s) => {
+      out.push(`◆ ${s.label}（${s.year}年・${s.age}歳）── ${s.era.label}：${s.era.head}`);
+      s.era.life.forEach((l) => out.push("　" + l));
+      out.push("　［この時期の画に出せるもの］" + s.era.visual.join("・"));
+      if (s.era.caution) out.push("　［注意］" + s.era.caution);
+      out.push("");
+    });
+
+    if (era.birthYear) {
+      const ng = R.anachronisms(era.region, era.birthYear + 20);
+      const half = R.partial(era.region, era.birthYear + 20);
+      out.push(`【${era.birthYear + 20}年（二十代）の場面で、画に出してはいけないもの】`);
+      if (ng.length) {
+        ng.forEach((a) => out.push(`・${a.what}（この土地に届くのは${a.from}年ごろから）`));
+        out.push("　" + ng[0].note);
+      } else {
+        out.push("・特になし");
+      }
+      if (half.length) {
+        out.push("");
+        out.push("【まだ「入りはじめ」のもの（全戸にあるように描かない）】");
+        half.forEach((a) => out.push(`・${a.what}：${a.note}`));
+      }
+    }
+
+    if (era.birthYear && era.deathYear) {
+      const a0 = era.stages[0], a1 = era.stages[era.stages.length - 1];
+      if (a0 && a1 && a0.era !== a1.era) {
+        out.push("");
+        out.push("【この一生で起きた変化（物語の軸にする）】");
+        out.push(`・${a0.year}年：${a0.era.head}`);
+        out.push(`・${a1.year}年：${a1.era.head}`);
+        out.push("・一人の人間が、文明の変わりめを丸ごと通り抜けている。「昔の人」ではなく、そこを描く。");
+      }
+    }
+
+    const pe = (era.region.prefEvents || []).filter(
+      (e) => e.y >= (era.birthYear || 0) && e.y <= (era.deathYear || 9999));
+    if (pe.length) {
+      out.push("");
+      out.push(`【${era.region.pref}で起きたこと（全国年表には出てこない）】`);
+      pe.forEach((e) => out.push(`・${e.y}年（${toGengo(e.y)}）${era.birthYear ? e.y - era.birthYear + "歳　" : ""}${e.t}`));
+    }
+
+    if (era.region.contrasts && era.region.contrasts.length) {
+      out.push("");
+      out.push("【同じ県のなかの時差 —— ここが物語になる】");
+      era.region.contrasts.forEach((c) => {
+        out.push(`・${c.what}：${c.city}年 ${c.cityNote} ／ ${c.village}年 ${c.villageNote}`);
+        out.push("　" + c.line);
+      });
+    }
+
+    out.push("");
+    out.push("【出典】");
+    era.region.sources.forEach((s) => out.push(`・${s.title} ${s.url}`));
+  }
+
   out.push("");
   out.push("【映像への反映】");
   out.push("・写真に写っている範囲は、いっさい作り変えない。服装も背景も持ち物も、写っているまま。");
