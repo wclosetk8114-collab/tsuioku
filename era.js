@@ -122,12 +122,33 @@ function yearOf(str) {
   return null;
 }
 
-/* 近い年の出来事を拾う（±1年まで。無理に結びつけない） */
+/* 近い年の出来事を拾う（±1年まで。無理に結びつけない）
+   history.js があればそちらを優先し、なければ上の簡易表を使う。 */
+function textOf(y) {
+  if (window.History) {
+    const e = window.History.topOf(y);
+    if (e) return e.t.replace(/た$/, "た年").replace(/だ$/, "だ年");
+  }
+  return EVENTS[y] || null;
+}
 function eventNear(y) {
   for (const d of [0, 1, -1]) {
-    if (EVENTS[y + d]) return { year: y + d, text: EVENTS[y + d], exact: d === 0 };
+    const t = textOf(y + d);
+    if (t) return { year: y + d, text: t, exact: d === 0 };
   }
   return null;
+}
+
+/* その人が生きたあいだの、大きな出来事の並び（年齢つき） */
+function timeline(by, dy, maxW) {
+  if (!by || !window.History) return [];
+  const end = dy || new Date().getFullYear();
+  return window.History.between(by, end, maxW || 1).map((e) => ({
+    year: e.y,
+    age: e.y - by,
+    text: e.t,
+    w: e.w,
+  }));
 }
 
 /* 人物 → 時代背景 */
@@ -171,7 +192,7 @@ function eraFor(person) {
     if (by) chips.push(`${dy - by}年の生涯`);
   }
 
-  return { birthYear: by, deathYear: dy, chips, lines };
+  return { birthYear: by, deathYear: dy, chips, lines, timeline: timeline(by, dy, 1) };
 }
 
 /* 動画の指示文の下書き */
@@ -184,6 +205,16 @@ function videoBrief(person, era) {
     out.push("");
     out.push("【時代の記録】");
     era.lines.forEach((l) => out.push("・" + l));
+    if (era.timeline && era.timeline.length) {
+      out.push("");
+      out.push("【この方が生きたあいだに、世の中で起きたこと】");
+      era.timeline.slice(0, 30).forEach((e) =>
+        out.push(`・${e.year}年（${toGengo(e.year)}）${e.age}歳　${e.text}`));
+      if (era.timeline.length > 30) out.push(`・ほか${era.timeline.length - 30}件`);
+      out.push("");
+      out.push("※ この年表は、ナレーションとエンドカードのためのもの。");
+      out.push("※ 画にはしない。写真に写っていない出来事を、背景として描き足さない。");
+    }
   }
   if (person.memo) {
     out.push("");
