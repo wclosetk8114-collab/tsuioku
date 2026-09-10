@@ -76,11 +76,23 @@ module.exports = async function handler(req, res) {
   }
   const model = body.model || "kling-o3-pro";
   const seconds = body.seconds === 5 ? 5 : 10;
-  const prompt = (body.prompt || "").toString().slice(0, 2000).trim() ||
+  let prompt = (body.prompt || "").toString().slice(0, 2000).trim() ||
     "古い記念写真が、静かに動きはじめる。写っている人だけが、ほんの数秒ぶんの時間を過ごす。";
 
-  const negative =
-    "色をつける, カラー化, 別人になる, 帽子や眼鏡や持ち物が消える, 文字, 字幕, 透かし, ロゴ, 枠, 分割画面, 急なカット, 大きく動く";
+  // 白黒のまま残すか、色を入れるか
+  const wantColor = body.color === true || body.color === "color";
+  const keepBW = "色をつける, カラー化, ";
+  const common =
+    "別人になる, 顔が変わる, 帽子や眼鏡や持ち物が消える, 文字, 字幕, 透かし, ロゴ, 枠, 分割画面, 急なカット, 大きく動く";
+  const negative = wantColor
+    ? "けばけばしい色, 彩度が高すぎる, ネオン, 塗り絵のような色, " + common
+    : keepBW + common;
+
+  if (wantColor) {
+    prompt += "\n\nはじめの三秒ほどで、白黒の画面にゆっくりと自然な色が入っていく。落ち着いた、色あせた古いカラー写真のような色みで、けばけばしくしない。肌の色は自然に。顔立ち・服装・持ちものは、白黒のときと同じまま変えない。";
+  } else {
+    prompt += "\n\n白黒のまま。色はつけない。";
+  }
 
   const payload = {
     image_url: image,

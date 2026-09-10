@@ -216,6 +216,11 @@ footer a{color:var(--gold-dim)}
 .sample-vids figcaption{margin-top:8px;font-size:12.5px;color:#5a6070;line-height:1.6}
 .sample-note{margin:14px 0 0;font-size:12px;color:#7a8090;line-height:1.7}
 @media(max-width:720px){.sample-vids{grid-template-columns:1fr;gap:18px}.sample-vids .tate video{max-width:280px;margin:0 auto}}
+
+.colorpick{margin:0 0 18px;padding:14px 16px;border:1px solid rgba(173,138,63,.28);border-radius:10px;background:rgba(255,255,255,.5)}
+.colorpick .cp-t{display:block;margin-bottom:8px;font-size:13px;letter-spacing:.1em;color:#8A6D2E}
+.colorpick label{display:inline-flex;align-items:center;gap:6px;margin-right:20px;font-size:14.5px;cursor:pointer}
+.colorpick .cp-n{margin:10px 0 0;font-size:12px;color:#7a8090;line-height:1.7}
 </style>
 </head>
 <body>
@@ -1230,10 +1235,17 @@ function jobLabel(j){
   if (j.state === "error")   return j.msg || "うまくいきませんでした。";
   return "";
 }
+let mvColor = "bw";   // "bw" = 白黒のまま / "color" = 色を入れる
 function drawMvGen(){
   const box = $("mvGen");
   if (!mvPhotos.length) { box.innerHTML = ""; return; }
-  box.innerHTML = mvPhotos.map((x, i) => {
+  const pick = `<div class="colorpick">
+      <span class="cp-t">仕上がりの色</span>
+      <label><input type="radio" name="mvcolor" value="bw"${mvColor === "bw" ? " checked" : ""}> 白黒のまま</label>
+      <label><input type="radio" name="mvcolor" value="color"${mvColor === "color" ? " checked" : ""}> 色を入れる</label>
+      <p class="cp-n">「色を入れる」は、白黒からゆっくり色が入る形にします。お顔や服装は変わりません。<br>お写真そのものを塗り替えるわけではないので、記録としての白黒も残ります。</p>
+    </div>`;
+  box.innerHTML = pick + mvPhotos.map((x, i) => {
     const j = mvJobs[i] || { state: "idle" };
     const busy = j.state === "sending" || j.state === "waiting";
     return `<div class="gen-row">
@@ -1247,6 +1259,9 @@ function drawMvGen(){
       </div>
     </div>`;
   }).join("");
+  box.querySelectorAll('input[name="mvcolor"]').forEach(r => {
+    r.onchange = () => { mvColor = r.value; };
+  });
   box.querySelectorAll("button[data-g]").forEach(b => {
     b.onclick = () => genOne(+b.dataset.g);
   });
@@ -1282,7 +1297,7 @@ async function genOne(i){
   try {
     const r = await fetch("/api/video", {
       method: "POST", headers: {"content-type":"application/json"},
-      body: JSON.stringify({ image: mvPhotos[i].url, prompt: mvPrompts[i] || mvBriefText.slice(0, 1200), seconds: MV_SECONDS })
+      body: JSON.stringify({ image: mvPhotos[i].url, prompt: mvPrompts[i] || mvBriefText.slice(0, 1200), seconds: MV_SECONDS, color: mvColor })
     });
     const j = await r.json().catch(() => ({}));
     if (r.status === 503 && j.needsSetup) { showSetup(j.detail); return; }
